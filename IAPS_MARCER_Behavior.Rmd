@@ -1,0 +1,397 @@
+---
+title: "IAPS MARCER Behavioral Results"
+author: "Mengzhe Wei"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_float:
+      collapsed: true
+---
+
+# MARCER IAPS behavior summary
+
+## set up
+```{r setup, warning=FALSE, message=FALSE, echo = FALSE, eval = TRUE}
+rm(list=ls());
+options(warnPartialMatchDollar=TRUE);   # safety option
+library("tidyverse");
+library("DescTools");
+library(lme4); 
+
+# Read the data (update this with the correct file path and format)
+in.path <- "C:/Users/Emotion/Documents/GIT-MW/IAPS/"
+data <- read.csv(paste0(in.path,"iaps_ratings.csv")) 
+test <- data %>%
+  group_by(sub.id) %>%
+  summarise(age.group = first(age.group),
+            MDD.status = first(MDD.status),
+            ) %>%
+  ungroup()
+table(test$age.group)
+table(test$MDD.status)
+
+test <- data %>%
+  group_by(sub.id) %>%
+  summarise(
+    age.group = first(age.group),
+    MDD.status = first(MDD.status),
+    cont.pos = mean(continuous.rating[valence == "positive"], na.rm = TRUE),
+    cont.neu = mean(continuous.rating[valence == "neutral"], na.rm = TRUE),
+    cont.neg = mean(continuous.rating[valence == "negative"], na.rm = TRUE),
+    mean_pos_pos = mean(pos.rating[valence == "positive"], na.rm = TRUE),
+    mean_neg_pos = mean(neg.rating[valence == "positive"], na.rm = TRUE),
+    mean_pos_neu = mean(pos.rating[valence == "neutral"], na.rm = TRUE),
+    mean_neg_neu = mean(neg.rating[valence == "neutral"], na.rm = TRUE),
+    mean_pos_neg = mean(pos.rating[valence == "negative"], na.rm = TRUE),
+    mean_neg_neg = mean(neg.rating[valence == "negative"], na.rm = TRUE),
+    ) %>%
+  ungroup()
+
+data %>%
+  group_by(MDD.status)%>%
+  summarise(pos.pos = median(pos.rating[valence == "positive"], na.rm = TRUE),
+            neg.pos = median(neg.rating[valence == "positive"], na.rm = TRUE),
+            pos.neu= median(pos.rating[valence =="neutral"], na.rm = TRUE),
+            neg.neu= median(neg.rating[valence == "neutral"], na.rm = TRUE),
+            pos.neg= median(pos.rating[valence == "negative"], na.rm = TRUE),
+            neg.neg= median(neg.rating[valence == "negative"], na.rm = TRUE),
+            cont.pos = median(continuous.rating[valence == "positive"], na.rm = TRUE),
+            cont.neu = median(continuous.rating[valence == "neutral"], na.rm = TRUE),
+            cont.neg = median(continuous.rating[valence == "negative"], na.rm = TRUE))
+
+data %>%
+  group_by(age.group)%>%
+  summarise(pos.pos = median(pos.rating[valence == "positive"], na.rm = TRUE),
+            neg.pos = median(neg.rating[valence == "positive"], na.rm = TRUE),
+            pos.neu= median(pos.rating[valence =="neutral"], na.rm = TRUE),
+            neg.neu= median(neg.rating[valence == "neutral"], na.rm = TRUE),
+            pos.neg= median(pos.rating[valence == "negative"], na.rm = TRUE),
+            neg.neg= median(neg.rating[valence == "negative"], na.rm = TRUE),
+            cont.pos = median(continuous.rating[valence == "positive"], na.rm = TRUE),
+            cont.neu = median(continuous.rating[valence == "neutral"], na.rm = TRUE),
+            cont.neg = median(continuous.rating[valence == "negative"], na.rm = TRUE))
+
+
+test %>%
+  group_by(MDD.status, age.group)%>%
+  summarise(pos.pos = mean(mean_pos_pos),
+            neg.pos = mean(mean_neg_pos),
+            pos.neu= mean(mean_pos_neu),
+            neg.neu= mean(mean_neg_neu),
+            pos.neg= mean(mean_pos_neg),
+            neg.neg= mean(mean_neg_neg),
+            cont.pos = mean(cont.pos),
+            cont.neu = mean(cont.neu),
+            cont.neg = mean(cont.neg))
+
+rating <- c("pos.rating","neg.rating")
+image <- c("positive","neutral","negative")
+trial.type <- c("LookNeg", "PosReap")
+do.trim <- 0.1;
+```
+
+## Function for graphing
+```{r function, warning=FALSE, message=FALSE, echo = FALSE, eval = TRUE}
+make.plot <- function(do.group) { # do.group <- "MDD status";
+  if (do.group == "age") {
+    group <- c("MA", "OA");
+  }
+  if (do.group == "MDD status") {
+    group <- c("HC", "MDD");
+  }
+  if (do.group == "age" | do.group == "MDD status") {
+    for (gid in 1:length(group)) {  # gid <- 1;
+      plot(x=0, y=0, xlim=c(0.5, length(image) +0.5), ylim=c(1-0.05,7+0.05), xaxt = 'n', ylab="", xlab="", main="", cex.axis=0.85, col='white');
+      if (do.group == "age") {
+        ttl <- paste0(group[gid] , " Group - ", length(unique(data$sub.id[which(data$age.group == group[gid])])), " participants");
+      }
+      if (do.group == "MDD status") {
+        ttl <- paste0(group[gid] , " Group - ", length(unique(data$sub.id[which(data$MDD.status == group[gid])])), " participants");
+      }
+      
+      mtext(side=3, text="Positive and Negative Ratings by Image Type", line=0.1, cex=0.85); 
+      mtext(side=3, text=ttl, line=1.2, cex=0.7); 
+      mtext(side=2, text="Rating", line=1.3, cex=0.7);
+      axis(side = 1, at = seq(1, by = 1, length.out = length(image)), labels = image, cex.axis = 0.9);
+      grid(col='darkgrey');
+      
+      shifts <- c(-0.15, 0.15)  # Calculate positions for boxplots
+      colors <- c("green", "blue") 
+      
+      for (rid in 1:length(rating)) {
+        for (iid in 1:length(image)) { # rid<-1; iid<-1
+           if (do.group == "age") {
+          tbl <- data[which(data$age.group == group[gid]),]}
+          if (do.group == "MDD status"){
+          tbl <- data[which(data$MDD.status == group[gid]),]}
+          idx <- which(tbl$valence == image[iid])
+          # Extract the data for the current rating type
+          vals <- tbl[idx, rating[rid]]
+          vals <- vals[!is.na(vals)]
+          # Plot the boxplot
+          boxplot(vals, at = iid + shifts[rid], col = colors[rid], border = 'black', add = TRUE,  notch=FALSE, xaxt = 'n', yaxt = 'n', bty = 'n', boxwex = 0.5, outpch = 1, outcol = adjustcolor(colors[rid], alpha = 0.5))
+        }
+      }
+    }
+  }
+}
+
+make.cont.plot <- function(do.group) { # do.group <- "MDD status";
+  if (do.group == "age") {
+    group <- c("MA", "OA"); colors <- c("#008080", "darkblue");
+  }
+  if (do.group == "MDD status") {
+    group <- c("HC", "MDD");colors <- c("#D62728", "#17BECF");
+  }
+  if (do.group == "age" | do.group == "MDD status") {
+    plot(x=0, y=0, xlim=c(0.5, length(image) +0.5), ylim=c(-6-0.05,6+0.05), xaxt = 'n', ylab="", xlab="", main="", cex.axis=0.85, col='white');
+    ttl<-paste0(do.group);
+    mtext(side=3, text="Continuous Rating by Image Type", line=0.1, cex=0.85); 
+    mtext(side=3, text=ttl, line=1.2, cex=0.7); 
+    mtext(side=2, text="Continuous Rating", line=1.3, cex=0.7);
+    axis(side = 1, at = seq(1, by = 1, length.out = length(image)), labels = image, cex.axis = 0.9);
+    grid(col='darkgrey');
+    abline(h = 0, col = "darkgrey", lwd = 1) 
+    shifts <- c(-0.15, 0.15)  # Calculate positions for boxplots
+    
+    for (gid in 1:length(group)) {  # gid <- 1;
+      for (iid in 1:length(image)) { # iid<-1;
+        if (do.group == "age") {
+          tbl <- data[which(data$age.group == group[gid]),]}
+      if (do.group == "MDD status") {
+        tbl <- data[which(data$MDD.status == group[gid]),]}
+    idx <- which(tbl$valence == image[iid])
+    # Extract the data for the current rating type
+    vals <- tbl[idx, "continuous.rating"]
+    # Plot the boxplot
+    boxplot(vals, at = iid+ shifts[gid], col =colors[gid], border = 'black', add = TRUE,  notch=FALSE, xaxt = 'n', yaxt = 'n', bty = 'n', boxwex = 0.5, outpch = 1)
+      }
+    }
+  }
+}
+```
+
+## Positive, negative, and continuous ratings by image type
+```{r rating check, warning=FALSE, message=FALSE,fig.height=3.5, fig.width=7.75, fig.align='center'}
+#Positve and Negative Ratings
+par(mar=c(3, 2.25, 2, 0.75), mgp=c(1.1, 0.2, 0), tcl=-0.2);
+plot(x=0, y=0, xlim=c(0.5, length(image) +0.5), ylim=c(1-0.05,7+0.05), xaxt = 'n', ylab="", xlab="", main="", cex.axis=0.85, col='white');
+mtext(side=3, text="Positive and Negative Ratings by Image Type", line=0.1, cex=1); 
+mtext(side=2, text="Rating", line=1.3, cex=0.9);
+axis(side = 1, at = seq(1, by = 1, length.out = length(image)), labels = image, cex.axis = 0.9);
+grid(col='darkgrey');
+
+shifts <- c(-0.15, 0.15)  # Calculate positions for boxplots
+colors <- c("green", "blue") 
+
+for (rid in 1:length(rating)) {
+  for (iid in 1:length(image)) { # rid<-1; iid<-1
+    idx <- which(data$valence == image[iid])
+    # Extract the data for the current rating type
+    vals <- data[idx, rating[rid]]
+    vals <- vals[!is.na(vals)]
+    # Plot the boxplot
+    boxplot(vals, at = iid + shifts[rid], col = colors[rid], border = 'black', add = TRUE,  notch=FALSE, xaxt = 'n', yaxt = 'n', bty = 'n', boxwex = 0.5, outpch = 1, outcol = adjustcolor(colors[rid], alpha = 0.7))
+  }
+}
+
+legend(x = "bottomright",  # Adjust the first value for horizontal positioning
+       legend = c("pos.rating", "neg.rating"), 
+       fill = colors, border = colors, bty = "o", cex = 0.7, title = "Rating Type")
+
+t<-YuenTTest(data$pos.rating[data$valence=="positive"], data$pos.rating[data$valence=="negative"], paired = FALSE, trim = do.trim);
+t.value <- round(t$statistic, digits = 2);
+p.value <- round(t$p.value, digits = 2);
+t<-YuenTTest(data$neg.rating[data$valence=="positive"], data$neg.rating[data$valence=="negative"], paired = FALSE, trim = do.trim);
+t.value <- round(t$statistic, digits = 2);
+p.value <- round(t$p.value, digits = 2);
+
+#Now divide by age group
+ 
+layout(matrix(1:3, nrow = 1), widths = c(1, 1, 0.28))  # Add a third column for the legend
+par(mar=c(3, 2.25, 2, 0.75), mgp=c(1.1, 0.2, 0), tcl=-0.2)
+# Generate the two plots
+make.plot("age")
+# Add a legend in the extra space on the right
+par(xpd = TRUE)  # Allow plotting outside plot region
+plot.new()
+legend("center", legend = c("pos.rating", "neg.rating"), 
+       fill = colors, border = colors, bty = "o", cex = 0.9, title = "Rating Type")
+
+#Now divide by MDD group
+
+layout(matrix(1:3, nrow = 1), widths = c(1, 1, 0.28))  # Add a third column for the legend
+par(mar=c(3, 2.25, 2, 0.75), mgp=c(1.1, 0.2, 0), tcl=-0.2)
+# Generate the two plots
+make.plot("MDD status")
+# Add a legend in the extra space on the right
+par(xpd = TRUE)  # Allow plotting outside plot region
+plot.new()
+legend("center", legend = c("pos.rating", "neg.rating"), 
+       fill = colors, border = colors, bty = "o", cex = 0.9, title = "Rating Type")
+
+#Sanity check for continuous rating as well
+par(mar=c(3, 2.25, 2, 0.75), mgp=c(1.1, 0.2, 0), tcl=-0.2);
+plot(x=0, y=0, xlim=c(0.5, length(image) +0.5), ylim=c(-6-0.05,6+0.05), xaxt = 'n', ylab="", xlab="", main="", cex.axis=0.85, col='white');
+mtext(side=3, text="Continuous Rating by Image Type", line=0.1, cex=1); 
+mtext(side=2, text="Continuous Rating", line=1.3, cex=0.9);
+axis(side = 1, at = seq(1, by = 1, length.out = length(image)), labels = image, cex.axis = 0.9);
+grid(col='darkgrey');
+abline(h = 0, col = "darkgrey", lwd = 1) 
+for (iid in 1:length(image)) { # iid<-1;
+  idx <- which(data$valence == image[iid])
+  # Extract the data for the current rating type
+  vals <- data[idx, "continuous.rating"]
+  vals <- vals[!is.na(vals)]
+  # Plot the boxplot
+  boxplot(vals, at = iid, col = "pink", border = 'black', add = TRUE,  notch=TRUE, xaxt = 'n', yaxt = 'n', bty = 'n', boxwex = 0.5, outpch = 1)
+}
+t<-YuenTTest(data$continuous.rating[data$valence=="positive"], data$continuous.rating[data$valence=="negative"], paired = FALSE, trim = do.trim);
+t.value <- round(t$statistic, digits = 2);
+p.value <- round(t$p.value, digits = 2);
+
+#gragh both age and mdd groups
+colors <- c("#008080", "darkblue", "#D62728", "#17BECF");
+layout(matrix(1:3, nrow = 1), widths = c(1, 1, 0.28))  # Add a third column for the legend
+par(mar=c(3, 2.25, 2, 0.75), mgp=c(1.1, 0.2, 0), tcl=-0.2)
+make.cont.plot("age")
+make.cont.plot("MDD status")
+par(xpd = TRUE)  # Allow plotting outside plot region
+plot.new()
+legend("center", legend = c("MA", "OA","MDD","HC"), 
+       fill = colors, border = colors, bty = "o", cex = 0.9, title = "Participants")
+
+```
+
+## Personal Rating and Normative Rating
+```{r normative, warning=FALSE, message=FALSE,fig.height=3.5, fig.width=7.75, fig.align='center'}
+model <- lmer(continuous.rating ~ valence.overall + (1 | sub.id) + (1 | image),
+              data = data)
+summary(model)
+model <- lmer(continuous.rating ~ valence.overall*MDD.status + (1 | sub.id) + (1 | image),
+              data = data)
+summary(model)
+model <- lmer(continuous.rating ~ valence.overall*age.group + (1 | sub.id) + (1 | image),
+              data = data)
+summary(model)
+ggplot(data, aes(x = valence.overall, y = continuous.rating, color = MDD.status)) +
+  geom_point(alpha = 0.6) +  # Add points with some transparency
+  geom_smooth(method = "lm", se = TRUE) +  # Add linear trend line with confidence interval
+  labs(title = "Relationship Between Normative Valence and Continuous Rating",
+       x = "Normative Valence (valence.overall)",
+       y = "Continuous Rating") +
+  theme_minimal()
+ggplot(data, aes(x = valence.overall, y = continuous.rating, color = age.group)) +
+  geom_point(alpha = 0.6) +  # Add points with some transparency
+  geom_smooth(method = "lm", se = TRUE) +  # Add linear trend line with confidence interval
+  labs(title = "Relationship Between Normative Valence and Continuous Rating",
+       x = "Normative Valence (valence.overall)",
+       y = "Continuous Rating") +
+  theme_minimal()
+```
+
+## Function for graphing2
+```{r function2, warning=FALSE, message=FALSE}
+make.plot <- function(do.group) { # do.group <- "MDD status"; do.group <- "do.all";
+  colors <- c("green", "blue") 
+  if (do.group == "age") {
+    group <- c("MA", "OA");}
+  if (do.group == "MDD status") {
+    group <- c("HC", "MDD");} else {
+    group <- "ALL"
+  }
+    for (gid in 1:length(group)) {
+    plot(x=0, y=0, xlim=c(0.5, length(trial.type) +0.5), ylim=c(0-0.05,7+0.05), xaxt = 'n', ylab="", xlab="", main="", cex.axis=0.85, col='white');
+  if (do.group == "age" | do.group == "MDD status") {
+      if (do.group == "age") {
+        ttl <- paste0(group[gid] , " Group - ", length(unique(data$sub.id[which(data$age.group == group[gid])])), " participants");
+      }
+      if (do.group == "MDD status") {
+        ttl <- paste0(group[gid] , " Group - ", length(unique(data$sub.id[which(data$MDD.status == group[gid])])), " participants");
+      }
+      mtext(side=3, text=ttl, line=1.2, cex=0.7); }
+  mtext(side=3, text="Positive and Negative Ratings by Trial Type", line=0.1, cex=0.85); 
+  mtext(side=2, text="Rating", line=1.3, cex=0.7);
+  axis(side = 1, at = seq(1, by = 1, length.out = length(trial.type)), labels = trial.type, cex.axis = 0.9);
+  grid(col='darkgrey');
+  shifts <- c(-0.15, 0.15)  # Calculate positions for boxplots
+  abline(h = 0, col = "darkgrey", lwd = 1) 
+  if (do.group == "do.all") {
+    for (rid in 1:length(rating)) {
+      for (tid in 1:length(trial.type)) { # tid<-1;
+        if (do.group == "age") {
+            tbl <- data[which(data$age.group == group[gid]),]}
+          if (do.group == "MDD status"){
+            tbl <- data[which(data$MDD.status == group[gid]),]}
+          if (do.group == "do.all"){
+            tbl <- data }
+        idx <- which(tbl$trial.type == trial.type[tid])
+        vals <- data[idx, rating[rid]]
+        boxplot(vals, at = tid + shifts[rid], col = colors[rid], border = 'black', add = TRUE,  notch=FALSE, xaxt = 'n', yaxt = 'n', bty = 'n', boxwex = 0.5, outpch = 1, outcol = adjustcolor(colors[rid], alpha = 0.7))
+      }
+    }
+    legend(x = "bottomright",  # Adjust the first value for horizontal positioning
+           legend = c("pos.rating", "neg.rating"), 
+           fill = colors, border = colors, bty = "o", cex = 0.7, title = "Rating Type")
+  }
+  
+  if (do.group == "age" | do.group == "MDD status") {
+      for (rid in 1:length(rating)) {
+        for (tid in 1:length(trial.type)) { # tid<-1;
+          if (do.group == "age") {
+            tbl <- data[which(data$age.group == group[gid]),]}
+          if (do.group == "MDD status"){
+            tbl <- data[which(data$MDD.status == group[gid]),]}
+          idx <- which(tbl$trial.type == trial.type[tid])
+          # Extract the data for the current rating type
+          vals <- data[idx, rating[rid]]
+          vals <- vals[!is.na(vals)]
+          # Plot the boxplot
+          boxplot(vals, at = tid + shifts[rid], col = colors[rid], border = 'black', add = TRUE,  notch=FALSE, xaxt = 'n', yaxt = 'n', bty = 'n', boxwex = 0.5, outpch = 1, outcol = adjustcolor(colors[rid], alpha = 0.7))
+        }
+      }
+    }
+  }
+}
+
+    
+
+    
+
+make.cont.plot <- function(do.group) { # do.group <- "MDD status";
+  if (do.group == "age") {
+    group <- c("MA", "OA"); colors <- c("#008080", "darkblue");
+  }
+  if (do.group == "MDD status") {
+    group <- c("HC", "MDD");colors <- c("#D62728", "#17BECF");
+  }
+  if (do.group == "age" | do.group == "MDD status") {
+    plot(x=0, y=0, xlim=c(0.5, length(image) +0.5), ylim=c(-6-0.05,6+0.05), xaxt = 'n', ylab="", xlab="", main="", cex.axis=0.85, col='white');
+    ttl<-paste0(do.group);
+    mtext(side=3, text="Continuous Rating by Image Type", line=0.1, cex=0.85); 
+    mtext(side=3, text=ttl, line=1.2, cex=0.7); 
+    mtext(side=2, text="Continuous Rating", line=1.3, cex=0.7);
+    axis(side = 1, at = seq(1, by = 1, length.out = length(image)), labels = image, cex.axis = 0.9);
+    grid(col='darkgrey');
+    abline(h = 0, col = "darkgrey", lwd = 1) 
+    shifts <- c(-0.15, 0.15)  # Calculate positions for boxplots
+    
+    for (gid in 1:length(group)) {  # gid <- 1;
+      for (iid in 1:length(image)) { # iid<-1;
+        if (do.group == "age") {
+          tbl <- data[which(data$age.group == group[gid]),]}
+      if (do.group == "MDD status") {
+        tbl <- data[which(data$MDD.status == group[gid]),]}
+    idx <- which(tbl$valence == image[iid])
+    # Extract the data for the current rating type
+    vals <- tbl[idx, "continuous.rating"]
+    # Plot the boxplot
+    boxplot(vals, at = iid+ shifts[gid], col =colors[gid], border = 'black', add = TRUE,  notch=FALSE, xaxt = 'n', yaxt = 'n', bty = 'n', boxwex = 0.5, outpch = 1)
+      }
+    }
+  }
+}
+make.plot("MDD status")
+```
