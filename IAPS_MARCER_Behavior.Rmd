@@ -17,9 +17,10 @@ Started 10/28/2024 by Mengzhe Wei. Preliminary behavioral data analysis for MARC
 # set up
 rm(list=ls());
 options(warnPartialMatchDollar=TRUE);   # safety option
-library("tidyverse");
-library("DescTools");
+library(tidyverse);
+library(DescTools);
 library(lme4); 
+library(gridExtra)
 
 # Read the data (update this with the correct file path and format)
 in.path <- "C:/Users/Emotion/Documents/GIT-MW/IAPS/"
@@ -395,6 +396,29 @@ summary(model_age)
 model_MDD <- lmer(neg.rating ~ pos.rating*MDD.status + (1 | sub.id),
               data = data_confirm)
 summary(model_MDD)
+ef <- effects::effect(term="pos.rating:age.group", mod=model_age)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$age.group<-as.factor(efdata$age.group)
+g0<-ggplot(efdata, aes(x=pos.rating, y=fit, color=age.group,group=age.group)) +
+    geom_point() +
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=age.group),alpha=0.3) +
+    labs(x= "pos.rating", y="neg.rating", color="age.group", fill="age.group") +
+    theme_classic() + theme(text=element_text(size=12)) +
+    scale_y_continuous(breaks = seq(1, 6, by=1), limits=c(0.5,6)) +
+    scale_x_continuous(breaks = seq(1, 7, by=1), limits=c(0.5,7))
+ef <- effects::effect(term="pos.rating:MDD.status", mod=model_MDD)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$MDD.status<-as.factor(efdata$MDD.status)
+g1<-ggplot(efdata, aes(x=pos.rating, y=fit, color=MDD.status,group=MDD.status)) +
+    geom_point() +
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=MDD.status),alpha=0.3) +
+    labs(x= "pos.rating", y="neg.rating", color="MDD.status", fill="MDD.status") +
+    theme_classic() + theme(text=element_text(size=12)) +
+    scale_y_continuous(breaks = seq(1, 6, by=1), limits=c(0.5,6)) +
+    scale_x_continuous(breaks = seq(1, 7, by=1), limits=c(0.5,7))
+grid.arrange(g0,g1, ncol=2)
 ```
 
 ## Relationship between continuous rating and Reappraisal (trial-wise)
@@ -411,5 +435,4 @@ summary(model_age)
 model_MDD <- lmer(continuous.rating ~ trial.type*MDD.status + (1 | sub.id),
               data = data_reap)
 summary(model_MDD)
-# The reappraisal effect is strengthened in MDD
 ```
